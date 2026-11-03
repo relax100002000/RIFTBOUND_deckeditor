@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+	<head>
+		<meta charset="UTF-8" />
+		<!-- ==== Force-reload local JS / CSS / HTML on every visit (no browser cache) ==== -->
+		<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+		<meta http-equiv="Pragma" content="no-cache" />
+		<meta http-equiv="Expires" content="0" />
+		<meta name="referrer" content="no-referrer" />
+		<script>
+			(function(){
+				var v = '?v=' + Date.now();
+				document.write('<script src="js/card_info.js' + v + '"><\/script>');
+				document.write('<script src="js/function.js' + v + '"><\/script>');
+			})();
+		</script>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+		<title>符文戰場 Riftbound Deck Builder</title>
+	</head>
+	<style>
+		input[type=checkbox] { height: 18px; width: 18px; }
+		img {
+			border-style: solid;
+			border-width: 1px;
+			border-radius: 8px;
+		}
+		img.card { object-fit: contain; }
+		img.card.empty { object-fit: fill; }
+		img.banned { border: 3px solid #e53935 !important; box-shadow: 0 0 6px rgba(229,57,53,0.8); }
+		img.banned-2v2 { border: 3px dashed #fb8c00 !important; }
+		img.out-env { border: 3px dashed #1e88e5 !important; opacity: 0.55; }
+		* { font-size: 16px; font-family: sans-serif; }
+		input[type="file"] {
+			position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+			overflow: hidden; clip: rect(0,0,0,0); border: 0;
+		}
+		button, .custom-file-upload {
+			height: 50px;
+			background-color: white;
+			color: black;
+			text-align: center;
+			text-decoration: none;
+			display: inline-block;
+			font-size: 16px;
+			margin: 4px 2px;
+			border-style: solid;
+			border-width: 1px;
+			border-radius: 10px;
+			cursor: pointer;
+		}
+		canvas { width: 205px !important; height: 205px !important; }
+		button.small-btn { height: 26px; padding: 0 10px; font-size: 14px; line-height: 24px; border-radius: 6px; margin: 2px; vertical-align: middle; }
+		span, input[type='checkbox'] { user-select: none; cursor: pointer; }
+		span { display: inline-block; vertical-align: middle; line-height: normal; margin-top: -10px; }
+		textarea { width: 80%; height: 60%; }
+
+		.zone-title { font-weight: bold; cursor: default; margin-top: 0px; }
+		.zone-count { cursor: default; margin-top: 0px; color: #666; }
+		.zone-count.ok { color: #2e7d32; }
+		.zone-count.ng { color: #c62828; }
+		.zone-box { display: inline-block; vertical-align: top; margin-right: 18px; }
+		.deck-slot { cursor: pointer; margin-right: 1px; margin-bottom: 1px; }
+		.deck-wrap { position: relative; display: inline-block; }
+		.champ-mark {
+			position: absolute; left: 3px; top: 3px; background: #ffb300; color: #000 !important;
+			font-size: 11px; font-weight: bold; padding: 0 4px; border-radius: 4px; pointer-events: none;
+		}
+
+		#window-container, #window-container-list, #window-container-code, #window-container-comment {
+			display: none;
+			position: fixed;
+			left: 0; top: 0;
+			width: 100%; height: 100%;
+			background-color: rgba(0,0,0,0.5);
+			z-index: 2000;
+		}
+		#window-pop {
+			background: white;
+			margin: 20px;
+			overflow: auto;
+			border-radius: 20px;
+			max-height: calc(100% - 40px);
+		}
+		#window-pop-list {
+			background: white;
+			margin: 50px 15%;
+			overflow: auto;
+			border-radius: 20px;
+			max-height: calc(100% - 100px);
+		}
+		#window-pop-code, #window-pop-comment {
+			background: white;
+			margin: 50px 30%;
+			overflow: auto;
+			border-radius: 20px;
+			max-height: calc(100% - 100px);
+		}
+		.window-content { margin: 30px; }
+		.view-row { margin-bottom: 14px; }
+		.view-row img { margin: 2px; border-radius: 10px; }
+		.view-title { font-weight: bold; margin: 6px 0; display: block; }
+
+		/* === Dark Mode Toggle Button === */
+		#darkModeToggle, #langToggle, #envToggle {
+			cursor: pointer;
+			background: transparent;
+			border: 1px solid #888;
+			border-radius: 6px;
+			padding: 2px 10px;
+			height: 24px;
+			line-height: 18px;
+			font-size: 14px;
+			margin-left: 8px;
+			user-select: none;
+			vertical-align: middle;
+		}
+		#darkModeToggle:hover, #langToggle:hover, #envToggle:hover { background: rgba(0,0,0,0.08); }
+
+		/* === big_pic lock indicator (when ALT is held) === */
+		body.bigpic-locked #cardinformation {
+			outline: 3px solid #ffb300;
+			outline-offset: 2px;
+			box-shadow: 0 0 16px rgba(255, 179, 0, 0.65);
+		}
+		body.bigpic-locked #cardinformation::before {
+			content: "🔒 LOCKED — release ALT to unlock";
+			position: absolute;
+			top: -28px; left: 0;
+			background: #ffb300;
+			color: #000;
+			font-weight: 700;
+			font-size: 12px;
+			padding: 3px 8px;
+			border-radius: 4px;
+			z-index: 1000;
+			pointer-events: none;
+			white-space: nowrap;
+		}
+		#bigPicHint {
+			display: inline-block;
+			font-size: 11px;
+			color: #555;
+			background: #fff8e1;
+			border: 1px solid #ffd54f;
+			border-radius: 4px;
+			padding: 2px 6px;
+			margin: 4px 0 4px 8px;
+			vertical-align: middle;
+			user-select: none;
+		}
+		.alt-lock-tip {
+			display: inline-block;
+			font-size: 12px;
+			color: #b26a00;
+			background: #fff8e1;
+			border: 1px dashed #ffb300;
+			border-radius: 4px;
+			padding: 1px 6px;
+			margin: 0 6px;
+			vertical-align: middle;
+		}
+		#infoTable td { padding: 3px 5px; vertical-align: top; }
+		#infoTable .label { width: 80px; white-space: nowrap; }
+		.color-chip {
+			display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+			margin: 0 4px 0 0; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.3);
+		}
+		/* card text icons */
+		.ic {
+			display: inline-block; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px;
+			font-size: 11px; font-weight: bold; text-align: center; vertical-align: 1px; margin: 0 1px; padding: 0 2px;
+		}
+		.ic-energy { background: #2b2b2b; color: #fff !important; }
+		.ic-rune { color: #fff !important; border-radius: 4px; }
+		.ic-might { background: #c27c0e; color: #fff !important; border-radius: 3px; }
+		.ic-exhaust { background: #607d8b; color: #fff !important; }
+		.kw { font-weight: bold; color: #1565c0; }
+
+		/* === Dark Mode Theme === */
+		body.dark-mode { background-color: #1a1a1a; color: #e6e6e6; }
+		body.dark-mode, body.dark-mode * { color: #e6e6e6; }
+		body.dark-mode a { color: #4da3ff; }
+		body.dark-mode a:visited { color: #b48bff; }
+		body.dark-mode button, body.dark-mode .custom-file-upload {
+			background-color: #2f2f2f; color: #e6e6e6; border-color: #555;
+		}
+		body.dark-mode button:hover, body.dark-mode .custom-file-upload:hover { background-color: #3d3d3d; }
+		body.dark-mode select, body.dark-mode input[type="text"], body.dark-mode textarea {
+			background-color: #2a2a2a; color: #e6e6e6; border: 1px solid #555;
+		}
+		body.dark-mode #window-pop, body.dark-mode #window-pop-list,
+		body.dark-mode #window-pop-code, body.dark-mode #window-pop-comment {
+			background: #242424; color: #e6e6e6;
+		}
+		body.dark-mode #cardinformation { background-color: #242424 !important; border-color: #555 !important; }
+		body.dark-mode #cardinformation table, body.dark-mode #cardinformation td { border-color: #555 !important; }
+		body.dark-mode img { border-color: #555; }
+		body.dark-mode #bigPicHint, body.dark-mode .alt-lock-tip { color: #ffd54f; background: #3a2e00; border-color: #c79100; }
+		body.dark-mode .zone-count.ng { color: #ff8a80; }
+		body.dark-mode .zone-count.ok { color: #81c784; }
+		body.dark-mode .zone-count { color: #aaa; }
+		body.dark-mode .kw { color: #64b5f6; }
+		body.dark-mode .champ-mark { color: #000 !important; }
+	</style>
+	<body>
+		<script>
+			// === Dark Mode: 早期套用,避免畫面閃爍 ===
+			try {
+				var saved = localStorage.getItem('rb_dark_mode');
+				var wantDark = false;
+				if (saved === '1') wantDark = true;
+				else if (saved === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) wantDark = true;
+				if (wantDark) document.body.classList.add('dark-mode');
+			} catch(e) {}
+		</script>
+
+		<div id='cardinformation' style='border: solid; border-width: 2px; position: absolute; z-index: 999; background-color: white; visibility: hidden; margin: 150px 0px 0px 40px;'>
+			<span id="bigPicHint" title="Hold ALT to keep this preview open and frozen on the current card.">💡 Hold <b>ALT</b> to lock this preview · release to unlock</span>
+			<img id="cross" width="30px" height="30px" style='border-style: none; float: right; margin: 4px 6px 0 0; cursor: pointer;' src="img/cancel_icon.png" onclick="if(!window.bigPicLocked) $('#cardinformation').css('visibility', 'hidden');" onmouseover="if(!window.bigPicLocked) $('#cardinformation').css('visibility', 'hidden');">
+			<table>
+				<tr>
+					<td style="vertical-align: top;">
+						<img width="358px" height="500px" id="big_pic" class="card" style="border-radius: 18px;" alt="" src="img/empty.jpg" onclick="addDeck(this)">
+					</td>
+					<td style="vertical-align: top;">
+						<table id="infoTable" width="400px" border="1" style="border: solid; border-width: 1px; border-collapse: collapse;"></table>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<span style="position: absolute; top: 8px; left: 8px; cursor: default;">
+			<button id="darkModeToggle" type="button" onclick="toggleDarkMode()" title="切換黑暗模式">🌙 Dark</button>
+			<button id="langToggle" type="button" onclick="toggleLang()" title="中文 / English">🌐 EN</button>
+			<button id="envToggle" type="button" onclick="toggleEnv()">🃏 英文版環境</button>
+			<span class="alt-lock-tip" title="Hold ALT to lock the card preview window.">🔒 Hold <b>ALT</b> = lock card preview</span>
+			※Right-click in the deck can add existing card.
+			<br>Deck List
+			<select id="selectDeck" onchange="selectDeck();">
+				<option value="">--Select Deck--</option>
+			</select>
+			<button class="small-btn" onclick="hideInfo(); openCodeWindow();">Add</button>
+			<button class="small-btn" onclick="hideInfo(); deletedecklist();">Delete</button>
+		</span>
+
+		<table width="1850px" style="margin-top: 56px;">
+			<tr>
+				<td style="vertical-align: bottom; width: 950px;">
+					<table>
+						<tr>
+							<td><div><canvas id="costChart"></canvas></div></td>
+							<td><div><canvas id="domainChart"></canvas></div></td>
+							<td><div><canvas id="typeChart"></canvas></div></td>
+						</tr>
+					</table>
+					<div oncontextmenu="return false;">
+						<div class="zone-box">
+							<span class="zone-title" data-i18n="zone_legend">傳奇</span>
+							<span class="zone-count" id="legendCount">0 / 1</span>
+							<div id="legendZone" style="margin-top: 4px;"></div>
+						</div>
+						<div class="zone-box">
+							<span class="zone-title" data-i18n="zone_bf">戰場</span>
+							<span class="zone-count" id="bfCount">0 / 3</span>
+							<div id="bfZone" style="margin-top: 4px;"></div>
+						</div>
+						<div class="zone-box">
+							<span class="zone-title" data-i18n="zone_rune">符文牌組</span>
+							<span class="zone-count" id="runeCount">0 / 12</span>
+							<span class="zone-count" id="runeDetail"></span>
+							<div id="runeZone" style="margin-top: 4px; width: 330px;"></div>
+						</div>
+					</div>
+				</td>
+				<td style="vertical-align: top;">
+					<button onclick="hideInfo(); cleardeck();">Clear Deck</button>
+					<button onclick="hideInfo(); openWindow('view');">Deck View</button>
+					<button onclick="hideInfo(); openWindow('list');">Card List</button>
+					<button onclick="hideInfo(); openCommentManager();">Comment</button>
+					<button onclick="hideInfo(); openCodeWindow();">Deck Code</button>
+					<button style="margin-left: 120px;" onclick="showVersion();">About</button>
+					<br><br>
+					<bdi data-i18n="f_type">種類</bdi>
+					<input type="checkbox" id="t_legend" checked><span onclick="clickSpan(this)" data-i18n="type_legend">傳奇</span>&ensp;
+					<input type="checkbox" id="t_unit" checked><span onclick="clickSpan(this)" data-i18n="type_unit">單位</span>&ensp;
+					<input type="checkbox" id="t_spell" checked><span onclick="clickSpan(this)" data-i18n="type_spell">法術</span>&ensp;
+					<input type="checkbox" id="t_gear" checked><span onclick="clickSpan(this)" data-i18n="type_gear">裝備</span>&ensp;
+					<input type="checkbox" id="t_rune" checked><span onclick="clickSpan(this)" data-i18n="type_rune">符文</span>&ensp;
+					<input type="checkbox" id="t_battlefield" checked><span onclick="clickSpan(this)" data-i18n="type_battlefield">戰場</span>&ensp;
+					<input type="checkbox" id="t_token"><span onclick="clickSpan(this)" data-i18n="super_token">衍生物</span>
+					<br><br>
+					<bdi data-i18n="f_sub">單位・法術・裝備</bdi>
+					<input type="checkbox" id="s_champion" checked><span onclick="clickSpan(this)" data-i18n="super_champion">英雄</span>&ensp;
+					<input type="checkbox" id="s_signature" checked><span onclick="clickSpan(this)" data-i18n="super_signature">專屬</span>&ensp;
+					<input type="checkbox" id="s_normal" checked><span onclick="clickSpan(this)" data-i18n="f_normal">一般</span>
+					<br><br>
+					<bdi data-i18n="f_domain">流派</bdi>
+					<span id="domainChecks" style="margin-top: 0px;"></span>
+					<br><br>
+					<bdi data-i18n="f_cost">費用</bdi>
+					<span id="costChecks" style="margin-top: 0px;"></span>
+					<br><br>
+					<input type="checkbox" id="onlyLegend"><span onclick="clickSpan(this)" data-i18n="f_onlyLegend">只顯示傳奇流派可用的卡（含該英雄的專屬卡）</span>
+					<br><br>
+					<bdi data-i18n="f_champion">英雄</bdi>
+					<select id="selectChampion"><option value="0">--All--</option></select>
+					&emsp;
+					<bdi data-i18n="f_tag">標籤</bdi>
+					<select id="selectTag"><option value="0">--All--</option></select>
+					&emsp;
+					<bdi data-i18n="f_rarity">稀有度</bdi>
+					<select id="selectRarity">
+						<option value="0">--All--</option>
+						<option value="common">Common</option>
+						<option value="uncommon">Uncommon</option>
+						<option value="rare">Rare</option>
+						<option value="epic">Epic</option>
+						<option value="showcase">Showcase</option>
+					</select>
+					<br><br>
+					<bdi data-i18n="f_keyword">關鍵字搜尋</bdi> <input type="text" id="textsearch" size="51" data-i18n-ph="f_keyword_ph" placeholder="卡名 / 英文名 / 能力 / 標籤 / 卡號 (空白 = AND)">
+					<br><br>
+					<bdi data-i18n="f_set">系列</bdi>
+					<select id="selectProduct"><option value="0">--All--</option></select>
+					&emsp;
+					Sort
+					<select id="selectSort" onchange="search();">
+						<option value="0" data-i18n="sort_0">卡號順</option>
+						<option value="1" data-i18n="sort_1">種類→費用順</option>
+						<option value="2" data-i18n="sort_2">流派→費用順</option>
+						<option value="3" data-i18n="sort_3">戰力順 (高→低)</option>
+					</select>
+					<br><br>
+					<button onclick="search();">Search</button>&emsp;&emsp;<button onclick="checkall();">Select All</button>&emsp;&emsp;<button onclick="uncheckall();">Clear All</button>
+					<br><br>
+					Total: <span id="totalCard" style="cursor: default; margin-top: 0px;">0</span>
+				</td>
+			</tr>
+			<tr>
+				<td style="vertical-align: top;" oncontextmenu="return false;">
+					<span class="zone-title" data-i18n="zone_main">主牌組</span>
+					<span class="zone-count" id="mainCount">0 / 40</span>
+					<span class="zone-count" id="mainDetail"></span>
+					<div id="mainZone" style="margin-top: 4px;"></div>
+					<div style="margin-top: 10px;">
+						<span data-i18n="link_official">官方網站:</span> <a target="_blank" id="linkOfficial" href="https://playriftbound.com/zh-tw/">Riftbound</a>
+						<br>
+						<span data-i18n="link_source">卡片資料・卡圖來源:</span> <a target="_blank" id="linkGallery" href="https://playriftbound.com/zh-tw/card-gallery/">Card Gallery</a>
+					</div>
+				</td>
+				<td style="vertical-align: top;">
+					Page: <span style="cursor: default; margin-top: 0px;" id="page"></span>
+					<table>
+						<tr>
+							<td rowspan="2">
+								<img id="larrow" style="cursor: pointer; border: none;" height="172px" src="img/larrow.png" onclick="changePage('back')">
+							</td>
+							<td style="height: 180px; vertical-align: bottom;" id="resultRow0"></td>
+							<td rowspan="2">
+								<img id="rarrow" style="cursor: pointer; border: none;" height="172px" src="img/rarrow.png" onclick="changePage('next')">
+							</td>
+						</tr>
+						<tr>
+							<td style="height: 180px; vertical-align: bottom;" id="resultRow1"></td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+
+		<div id="window-container-list">
+			<div id="window-pop-list">
+				<div id="decklist" class="window-content"></div>
+			</div>
+		</div>
+
+		<div id="window-container-code">
+			<div id="window-pop-code">
+				<div id="deckcode" style="text-align: center;" class="window-content">
+					Deck Title
+					<br><br>
+					<input style="width: 80%;" type="text" id="deckTitle" value="Simple Deck" maxlength="64">
+					<br><br>
+					Deck Code
+					<br><br>
+					<textarea style="height: 300px;" id="textCode" rows="4" cols="50"></textarea>
+					<div id="deckStr">&emsp;</div>
+					<br>
+					<div style="display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; max-width: 430px; margin: 0 auto;">
+						<button style="width: 200px; margin: 0;" onclick="downloadDeck();">Download Deck</button>
+						<label for="fileinput" class="custom-file-upload" style="width: 200px; height: 50px; box-sizing: border-box; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">Upload Deck</label>
+						<input style="display: none;" id="fileinput" type="file" accept=".csv,.txt"/>
+						<button style="width: 200px; margin: 0;" onclick="copyClipboard();">Copy to clipboard</button>
+						<button style="width: 200px; margin: 0;" onclick="loadFromCode();">Load code</button>
+						<button style="width: 410px; margin: 0;" onclick="addDecklist();">Add to deck list</button>
+						<button id="resetAllDecksBtn" style="width: 410px; margin: 0; background-color: #c0392b; color: #fff; border: 2px solid #962d22; font-weight: bold;" onclick="resetAllDecks();" title="Delete every saved deck (cannot be undone)">Reset all saved decks</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="window-container-comment">
+			<div id="window-pop-comment">
+				<div id="commentcode" style="text-align: center;" class="window-content">
+					Comment Profile (JSON)
+					<br><br>
+					<textarea style="height: 300px;" id="textCommentCode" rows="4" cols="50"></textarea>
+					<div id="commentStr">&emsp;</div>
+					<br>
+					<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 430px; margin: 0 auto;">
+						<button style="width: 200px; margin: 0;" onclick="downloadCommentBlob();">Download Comment</button>
+						<label for="commentFileinput" class="custom-file-upload" style="width: 200px; height: 50px; box-sizing: border-box; padding: 0; margin: 0; display: inline-flex; align-items: center; justify-content: center;">Upload Comment</label>
+						<input style="display: none;" id="commentFileinput" type="file" accept=".json,.txt"/>
+						<button style="width: 200px; margin: 0;" onclick="copyCommentClipboard();">Copy to clipboard</button>
+						<button style="width: 200px; margin: 0;" onclick="applyCommentText();">Apply JSON</button>
+						<button style="width: 410px; margin: 0; background-color: #c0392b; color: #fff; border: none;" onclick="resetAllComments();" title="Delete every saved comment (cannot be undone)">Reset all comments</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="window-container">
+			<div id="window-pop">
+				<div class="window-content" id="deckView"></div>
+			</div>
+		</div>
+	</body>
+</html>
